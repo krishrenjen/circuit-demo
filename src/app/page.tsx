@@ -1,103 +1,217 @@
-import Image from "next/image";
+"use client";
+import React, { useState, useEffect } from "react";
+import { Stage, Layer, Circle, Line } from "react-konva";
+import type { KonvaEventObject } from "konva/lib/Node";
 
-export default function Home() {
+interface Node {
+  id: string;
+  x: number;
+  y: number;
+  radius: number;
+  fill: string;
+}
+
+interface Wire {
+  id: string;
+  from: string;
+  to: string;
+}
+
+interface EditingWire {
+  wireId: string;
+  end: "from" | "to";
+}
+
+function App() {
+  const NODE_RADIUS = 25;
+  const [nodes, setNodes] = useState<Node[]>([]);
+  const [wires, setWires] = useState<Wire[]>([]);
+  const [wireCounter, setWireCounter] = useState(0);
+  const [mousePos, setMousePos] = useState<{ x: number; y: number }>({
+    x: 0,
+    y: 0,
+  });
+
+  const [creatingWireStartNode, setCreatingWireStartNode] = useState<
+    string | null
+  >(null);
+  const [editingWire, setEditingWire] = useState<EditingWire | null>(null);
+
+  useEffect(() => {
+    const generatedNodes: Node[] = [];
+    const count = 6;
+    for (let i = 0; i < count; i++) {
+      generatedNodes.push({
+        id: `node-${i}`,
+        x: 150 + i * 120,
+        y: window.innerHeight / 2,
+        radius: NODE_RADIUS,
+        fill: "#3498db",
+      });
+    }
+    setNodes(generatedNodes);
+  }, []);
+
+  function getNodeById(id: string) {
+    return nodes.find((n) => n.id === id);
+  }
+
+  function handleStageMouseMove(e: KonvaEventObject<PointerEvent>) {
+    const pos = e.target.getStage()?.getPointerPosition();
+    if (pos) setMousePos(pos);
+  }
+
+  function handleStageClick(e: KonvaEventObject<MouseEvent>) {
+    // If editing a wire and clicked not on a node, delete the wire
+    if (editingWire) {
+      setWires((prev) => prev.filter((w) => w.id !== editingWire.wireId));
+      setEditingWire(null);
+    }
+  }
+
+  function handleNodeClick(nodeId: string) {
+    if (editingWire) {
+      // Finish editing wire
+      setWires((prev) =>
+        prev.map((wire) =>
+          wire.id === editingWire.wireId
+            ? { ...wire, [editingWire.end]: nodeId }
+            : wire
+        )
+      );
+      setEditingWire(null);
+    } else if (creatingWireStartNode === null) {
+      // Start new wire
+      setCreatingWireStartNode(nodeId);
+    } else if (creatingWireStartNode === nodeId) {
+      // Cancel new wire
+      setCreatingWireStartNode(null);
+    } else {
+      // Complete new wire
+      const newWire: Wire = {
+        id: `wire-${wireCounter}`,
+        from: creatingWireStartNode,
+        to: nodeId,
+      };
+      setWires((prev) => [...prev, newWire]);
+      setWireCounter((c) => c + 1);
+      setCreatingWireStartNode(null);
+    }
+  }
+
+  function handleNodeDragMove(e: KonvaEventObject<DragEvent>) {
+    const id = e.target.id();
+    const x = e.target.x();
+    const y = e.target.y();
+
+    setNodes((prev) =>
+      prev.map((node) => (node.id === id ? { ...node, x, y } : node))
+    );
+  }
+
+  function handleWireClick(
+    e: KonvaEventObject<MouseEvent>,
+    wireId: string,
+    fromNode: { x: number; y: number },
+    toNode: { x: number; y: number }
+  ) {
+    const clickPos = e.target.getStage()?.getPointerPosition();
+    if (!clickPos) return;
+
+    const dist = (p1: { x: number; y: number }, p2: { x: number; y: number }) =>
+      Math.hypot(p1.x - p2.x, p1.y - p2.y);
+
+    const clickedEnd =
+      dist(clickPos, fromNode) < dist(clickPos, toNode) ? "from" : "to";
+
+    setEditingWire({ wireId, end: clickedEnd });
+    setCreatingWireStartNode(null); // cancel any wire creation
+  }
+
+  function getWirePoints(wire: Wire): [number, number, number, number] | null {
+    const fromNode = getNodeById(wire.from);
+    const toNode = getNodeById(wire.to);
+    if (!fromNode || !toNode) return null;
+
+    const isEditingFrom =
+      editingWire?.wireId === wire.id && editingWire.end === "from";
+    const isEditingTo =
+      editingWire?.wireId === wire.id && editingWire.end === "to";
+
+    const start = isEditingFrom ? mousePos : fromNode;
+    const end = isEditingTo ? mousePos : toNode;
+
+    return [start.x, start.y, end.x, end.y];
+  }
+
   return (
-    <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="list-inside list-decimal text-sm/6 text-center sm:text-left font-[family-name:var(--font-geist-mono)]">
-          <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] px-1 py-0.5 rounded font-[family-name:var(--font-geist-mono)] font-semibold">
-              src/app/page.tsx
-            </code>
-            .
-          </li>
-          <li className="tracking-[-.01em]">
-            Save and see your changes instantly.
-          </li>
-        </ol>
+    <Stage
+      width={window.innerWidth}
+      height={window.innerHeight}
+      onMouseMove={handleStageMouseMove}
+      onClick={handleStageClick}
+      style={{ backgroundColor: "#f0f0f0" }}
+    >
+      <Layer>
+        {/* Render all wires */}
+        {wires.map((wire) => {
+          const points = getWirePoints(wire);
+          if (!points) return null;
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
+          return (
+            <Line
+              key={wire.id}
+              points={points}
+              stroke="#2c3e50"
+              strokeWidth={3}
+              hitStrokeWidth={15}
+              onClick={(e) => {
+                const from = getNodeById(wire.from)!;
+                const to = getNodeById(wire.to)!;
+                handleWireClick(e, wire.id, from, to);
+              }}
             />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
-        </div>
-      </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
+          );
+        })}
+
+        {/* Render wire currently being created */}
+        {creatingWireStartNode &&
+          (() => {
+            const startNode = getNodeById(creatingWireStartNode);
+            if (!startNode) return null;
+            return (
+              <Line
+                points={[startNode.x, startNode.y, mousePos.x, mousePos.y]}
+                stroke="#e74c3c"
+                strokeWidth={3}
+                dash={[10, 5]}
+                pointerEvents="none"
+              />
+            );
+          })()}
+
+        {/* Render nodes */}
+        {nodes.map((node) => (
+          <Circle
+            key={node.id}
+            id={node.id}
+            x={node.x}
+            y={node.y}
+            radius={node.radius}
+            fill={node.fill}
+            shadowBlur={5}
+            draggable
+            onDragMove={handleNodeDragMove}
+            onClick={(e) => {
+              e.cancelBubble = true;
+              handleNodeClick(node.id);
+            }}
+            style={{ cursor: "pointer" }}
           />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
-    </div>
+        ))}
+      </Layer>
+    </Stage>
   );
 }
+
+export default App;
