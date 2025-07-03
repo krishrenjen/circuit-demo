@@ -32,6 +32,20 @@ export default function RenderElement({
           radius={5}
           fill="#FF0000"
           onClick={() => props.handleNodeClick(node.id)}
+          hitStrokeWidth={10}
+          onMouseEnter={(e) => {
+            const stage = e.target.getStage();
+            if (stage) {
+              stage.container().style.cursor = "pointer";
+            }
+          }}
+          onMouseLeave={(e) => {
+            const stage = e.target.getStage();
+            if (stage) {
+              stage.container().style.cursor = "default";
+            }
+          }}
+
           // TODO: Add interaction handlers here
         />
       ))}

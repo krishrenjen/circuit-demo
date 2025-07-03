@@ -55,6 +55,40 @@ export default function Canvas() {
     setElements(initialElements);
   }, []);
 
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "n" || e.key === "N") {
+        const newId = `lightbulb-${elements.length + 1}`;
+
+        const newLightbulb: CircuitElement = {
+          id: newId,
+          type: "lightbulb",
+          x: mousePos.x,
+          y: mousePos.y,
+          nodes: [
+            {
+              id: `${newId}-node-1`,
+              x: 2,
+              y: 40,
+              parentId: newId,
+            },
+            {
+              id: `${newId}-node-2`,
+              x: 40,
+              y: 40,
+              parentId: newId,
+            },
+          ],
+        };
+
+        setElements((prev) => [...prev, newLightbulb]);
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [mousePos, elements]);
+
   function getNodeById(nodeId: string) {
     return elements.flatMap((e) => e.nodes).find((n) => n.id === nodeId);
   }
@@ -181,6 +215,7 @@ export default function Canvas() {
         data={{ mousePos, elements, wires }}
         className="w-full !h-screen"
       />
+      
       <Stage
         width={window.innerWidth * 0.75}
         height={window.innerHeight}
